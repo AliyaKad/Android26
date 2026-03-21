@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "552001051205",
+    "project_id": "android26-62fcd",
+    "storage_bucket": "android26-62fcd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:552001051205:android:f9db2adaa9704dfbe3a12c",
+        "android_client_info": {
+          "package_name": "ru.itis.android26"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD5nSp3aj5M5qIRfd-mx8LfelioTxWOGvs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
