@@ -5,51 +5,60 @@ import androidx.compose.ui.graphics.Color
 import com.google.firebase.FirebaseApp
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.tasks.await
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
-import ru.itis.library.remoteconfig.parser.parseBoolean
-import ru.itis.library.remoteconfig.parser.parseDouble
-import ru.itis.library.remoteconfig.parser.parseInt
-import ru.itis.library.remoteconfig.parser.parseColorHex
+import ru.itis.library.remoteconfig.parser.*
 
 class RemoteConfigManager private constructor(context: Context) {
 
     private val remoteConfig = FirebaseRemoteConfig.getInstance()
+    private val _lastFetchTime = MutableStateFlow(System.currentTimeMillis())
+    val lastFetchTime: StateFlow<Long> = _lastFetchTime.asStateFlow()
+
     private val json = Json { ignoreUnknownKeys = true }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var autoRefreshJob: Job? = null
 
     init {
-        FirebaseApp.initializeApp(context)
+        if (FirebaseApp.getApps(context).isEmpty()) {
+            FirebaseApp.initializeApp(context)
+        }
         val settings = FirebaseRemoteConfigSettings.Builder()
             .setMinimumFetchIntervalInSeconds(0)
             .build()
         remoteConfig.setConfigSettingsAsync(settings)
-        remoteConfig.fetchAndActivate()
+        refreshConfig()
     }
 
-    fun getString(key: String, default: String): String {
-        return remoteConfig.getString(key).takeIf { it.isNotEmpty() } ?: default
+    fun refreshConfig() {
+        scope.launch {
+            try {
+                remoteConfig.fetchAndActivate().await()
+                _lastFetchTime.value = System.currentTimeMillis()
+            } catch (e: Exception) {
+            }
+        }
     }
 
-    fun getBoolean(key: String, default: Boolean): Boolean {
-        val raw = remoteConfig.getString(key)
-        return parseBoolean(raw, default)
-    }
+    fun getString(key: String, default: String): String =
+        remoteConfig.getString(key).takeIf { it.isNotEmpty() } ?: default
 
-    fun getInt(key: String, default: Int): Int {
-        val raw = remoteConfig.getString(key)
-        return parseInt(raw, default)
-    }
+    fun getBoolean(key: String, default: Boolean): Boolean =
+        parseBoolean(remoteConfig.getString(key), default)
 
-    fun getDouble(key: String, default: Double): Double {
-        val raw = remoteConfig.getString(key)
-        return parseDouble(raw, default)
-    }
+    fun getInt(key: String, default: Int): Int =
+        parseInt(remoteConfig.getString(key), default)
 
-    fun getColor(key: String, default: Color): Color {
-        val raw = remoteConfig.getString(key)
-        return parseColorHex(raw, default)
-    }
+    fun getDouble(key: String, default: Double): Double =
+        parseDouble(remoteConfig.getString(key), default)
 
+    fun getColor(key: String, default: Color): Color =
+        parseColorHex(remoteConfig.getString(key), default)
 
     fun <T> getJson(key: String, default: T, serializer: KSerializer<T>): T {
         val raw = remoteConfig.getString(key)
@@ -60,10 +69,25 @@ class RemoteConfigManager private constructor(context: Context) {
         }
     }
 
-    fun getExperimentGroup(experimentKey: String, default: String = "control"): String {
-        return remoteConfig.getString(experimentKey).takeIf { it.isNotEmpty() } ?: default
+    fun getExperimentGroup(experimentKey: String, default: String = "control"): String =
+        remoteConfig.getString(experimentKey).takeIf { it.isNotEmpty() } ?: default
+
+    fun enableAutoRefresh(intervalMs: Long) {
+        disableAutoRefresh()
+        if (intervalMs > 0) {
+            autoRefreshJob = scope.launch {
+                while (true) {
+                    delay(intervalMs)
+                    refreshConfig()
+                }
+            }
+        }
     }
 
+    fun disableAutoRefresh() {
+        autoRefreshJob?.cancel()
+        autoRefreshJob = null
+    }
 
     companion object {
         @Volatile
