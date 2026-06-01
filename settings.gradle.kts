@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Android26"
 include(":app")
- 
+include(":library")
